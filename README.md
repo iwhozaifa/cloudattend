@@ -4,7 +4,7 @@ CloudAttend is a serverless university attendance-management application built f
 
 This npm-workspaces monorepo contains a React frontend, TypeScript Lambda API, shared Zod contracts, AWS CDK infrastructure, tests, deployment utilities, and documentation.
 
-> **Current status:** the repository contains a deployable, verified attendance core, but not every planned production feature. The exact implemented API and remaining work are documented below. Reporting, analytics, user-provisioning triggers/scripts, camera scanning, frontend tests, CI, and deployed smoke tests remain unfinished; the repository is therefore not tagged `v1.0.0`.
+> **Current status:** the repository contains a deployable, locally verified attendance core, but not every planned production feature. The exact implemented API and remaining work are documented below. Reporting, analytics, administrative user scripts, camera scanning, CI, and deployed smoke tests remain unfinished; the repository is therefore not tagged `v1.0.0`.
 
 ## Contents
 
@@ -84,7 +84,7 @@ This npm-workspaces monorepo contains a React frontend, TypeScript Lambda API, s
 | Tests | Vitest | Backend unit tests |
 | Quality | ESLint, TypeScript | Static analysis and strict checking |
 
-Development requires Node.js 24+. The application Lambda currently uses CDK's `nodejs22.x` runtime declaration in [cloudattend-stack.ts](infra/lib/cloudattend-stack.ts); CDK-managed support functions may use the runtime selected by the installed CDK release.
+Development requires Node.js 24+. Both application Lambda functions use the `nodejs24.x` runtime in [cloudattend-stack.ts](infra/lib/cloudattend-stack.ts); CDK-managed support functions may use a runtime selected by the installed CDK release.
 
 ## AWS services
 
@@ -92,7 +92,7 @@ Development requires Node.js 24+. The application Lambda currently uses CDK's `n
 
 Cognito stores credentials, verifies email addresses, and issues JWTs. The public browser client has no secret because browser applications cannot safely hold one. Public users cannot select a teacher role; teacher membership is administrative.
 
-The intended post-confirmation Lambda is not yet attached. On a fresh stack, confirmed users still require a Users-table record and correct Cognito group membership before protected application flows work completely.
+A post-confirmation Lambda atomically claims the normalized roll number, creates the Users-table record, and assigns the confirmed account to `STUDENT`. A roll-number claim item prevents two concurrent confirmations from using the same roll number.
 
 ### API Gateway HTTP API
 
@@ -364,7 +364,7 @@ CDK emits these outputs:
 
 Registration sends email, password, name, and `custom:rollNo` to Cognito. Cognito sends an email code, and the confirmation UI confirms the account.
 
-The intended complete flow then adds the user to `STUDENT` and creates its Users-table record through a post-confirmation trigger. That trigger is not implemented yet, so fresh-stack users require an administrative group assignment and Users record.
+After confirmation, the post-confirmation trigger atomically reserves the normalized roll number, creates the Users-table profile, and adds the account to `STUDENT`. The trigger checks for an existing profile so a retry can safely finish group assignment.
 
 Teacher accounts must never come from public role selection. They should be created by an administrative script that creates/confirms the user, assigns `TEACHER`, and writes Users. That script remains unfinished.
 
@@ -530,7 +530,7 @@ Confirm the token belongs to the configured User Pool/App Client and the user be
 
 ### `/me` has no user record
 
-The post-confirmation trigger is not yet implemented. Administratively create the matching Users-table record and group assignment.
+Inspect the post-confirmation Lambda logs. The trigger must atomically create the Users profile and roll-number claim, then add the account to `STUDENT`; a duplicate roll number deliberately prevents profile provisioning.
 
 ### CDK cannot find account/region
 
@@ -598,8 +598,6 @@ See [docs/git-workflow.md](docs/git-workflow.md) for the compact contributor gui
 
 Complete these before claiming production readiness:
 
-- Cognito post-confirmation Lambda for Users records and `STUDENT` membership.
-- Safe concurrent roll-number uniqueness enforcement.
 - Administrative teacher-creation and rerunnable demo-user scripts.
 - Student search and enrollment removal.
 - Atomic one-open-session-per-course enforcement.
