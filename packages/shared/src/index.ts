@@ -12,17 +12,17 @@ export const CreateCourseSchema = z.object({
   semester: z.string().trim().min(2).max(50),
   section: z.string().trim().min(1).max(20),
   attendanceThreshold: z.number().int().min(1).max(100).default(75)
-});
+}).strict();
 export const UpdateCourseSchema = CreateCourseSchema.partial();
-export const EnrollStudentSchema = z.object({ studentId: z.string().uuid() });
-export const StartSessionSchema = z.object({ durationMinutes: z.number().int().min(1).max(180).default(10) });
-export const CheckInSchema = z.object({ token: z.string().min(20).max(4096) });
+export const EnrollStudentSchema = z.object({ studentId: z.string().uuid() }).strict();
+export const StartSessionSchema = z.object({ durationMinutes: z.number().int().min(1).max(180).default(10) }).strict();
+export const CheckInSchema = z.object({ token: z.string().min(20).max(4096) }).strict();
 export const RegisterSchema = z.object({
   name: z.string().trim().min(2).max(100),
   email: z.string().trim().email().max(254).transform((v) => v.toLowerCase()),
   rollNo: z.string().trim().min(2).max(64),
   password: z.string().min(12).max(128)
-});
+}).strict();
 
 export type User = { userId: string; email: string; name: string; rollNo?: string; role: Role; createdAt: string; updatedAt: string };
 export type Course = z.infer<typeof CreateCourseSchema> & { courseId: string; teacherId: string; createdAt: string; updatedAt: string };

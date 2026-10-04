@@ -1,6 +1,6 @@
 {
   "name": "@cloudattend/api", "version": "1.0.0", "type": "module",
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc --noEmit -p tsconfig.json", "lint": "eslint src tests --max-warnings=0", "pretest": "npm --workspace @cloudattend/shared run build", "test": "vitest run" },
-  "dependencies": { "@aws-sdk/client-dynamodb": "^3.750.0", "@aws-sdk/client-s3": "^3.750.0", "@aws-sdk/client-secrets-manager": "^3.750.0", "@aws-sdk/lib-dynamodb": "^3.750.0", "@aws-sdk/s3-request-presigner": "^3.750.0", "@cloudattend/shared": "*", "zod": "^3.24.2" },
-  "devDependencies": { "@types/aws-lambda": "^8.10.147", "@types/node": "^24.0.0", "eslint": "^9.20.0", "typescript": "^5.7.3", "typescript-eslint": "^8.24.0", "vitest": "^3.0.7" }
+  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc --noEmit -p tsconfig.json", "lint": "eslint src tests --max-warnings=0", "pretest": "npm --workspace @cloudattend/shared run build", "test": "vitest run", "test:coverage": "vitest run --coverage" },
+  "dependencies": { "@aws-sdk/client-cognito-identity-provider": "^3.750.0", "@aws-sdk/client-dynamodb": "^3.750.0", "@aws-sdk/client-s3": "^3.750.0", "@aws-sdk/client-secrets-manager": "^3.750.0", "@aws-sdk/lib-dynamodb": "^3.750.0", "@aws-sdk/s3-request-presigner": "^3.750.0", "@cloudattend/shared": "*", "zod": "^3.24.2" },
+  "devDependencies": { "@types/aws-lambda": "^8.10.147", "@types/node": "^24.0.0", "@vitest/coverage-v8": "^5.0.3", "eslint": "^9.20.0", "typescript": "^5.7.3", "typescript-eslint": "^8.24.0", "vitest": "^5.0.3" }
 }
