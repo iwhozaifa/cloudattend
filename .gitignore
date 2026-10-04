@@ -3,6 +3,8 @@ dist/
 build/
 cdk.out/
 coverage/
+playwright-report/
+test-results/
 .env
 .env.*
 !.env.example
