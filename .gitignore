@@ -12,5 +12,6 @@ demo-credentials.local.json
 *.log
 .DS_Store
 .vite/
+*.tsbuildinfo
 apps/web/public/config.json
 infra/cdk-outputs*.json
