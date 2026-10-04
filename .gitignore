@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+cdk.out/
+coverage/
+.env
+.env.*
+!.env.example
+demo-credentials.local.json
+*.local.json
+*.pem
+*.log
+.DS_Store
+.vite/
+apps/web/public/config.json
+infra/cdk-outputs*.json
