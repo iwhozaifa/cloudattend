@@ -8,6 +8,8 @@ export type AuthContextValue = {
   status: AuthStatus;
   me: Me | null;
   error: unknown;
+  /** True after the user chose to sign out, so the next sign-in does not resume their last page. */
+  signedOutByUser: boolean;
   /** Re-reads the profile after sign-in or a role change. */
   refresh: () => Promise<Me | null>;
   signOut: () => Promise<void>;

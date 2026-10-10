@@ -73,6 +73,8 @@ export function SignUpPage() {
       navigate(`/sign-in${carry}`, { state: { email, notice: 'Email verified. Sign in to continue.' } satisfies AuthNotice });
     } catch (caught) {
       setError(authErrorMessage(caught));
+      confirm.setValue('code', '');
+      confirm.setFocus('code');
     }
   });
 

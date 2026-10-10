@@ -59,6 +59,7 @@ export function ForgotPasswordPage() {
       navigate(`/sign-in${carry}`, { state: { email, notice: 'Password updated. Sign in with your new password.' } satisfies AuthNotice });
     } catch (caught) {
       setError(authErrorMessage(caught));
+      if (caught instanceof Error && /Code/.test(caught.name)) reset.setValue('code', '');
     }
   });
 

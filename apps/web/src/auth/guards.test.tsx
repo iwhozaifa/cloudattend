@@ -1,9 +1,11 @@
 import { screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { Route } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
-import { fakeAdapter, renderWithApp, serveMe, student, teacher } from '@/test/render';
+import { fakeAdapter, LocationProbe, renderWithApp, serveMe, student, teacher } from '@/test/render';
 import { API, server } from '@/test/server';
+import { useAuth } from './auth-context';
 import { PublicOnly, RequireAuth, RequireRole } from './guards';
 
 describe('route guards', () => {
@@ -44,5 +46,22 @@ describe('route guards', () => {
     serveMe(student);
     renderWithApp(<PublicOnly><p>sign in form</p></PublicOnly>, { adapter: fakeAdapter(true), path: '/sign-in', route: '/sign-in?returnTo=//evil.example' });
     expect(await screen.findByTestId('location')).toHaveTextContent(/^\/$/);
+  });
+});
+
+describe('sign out', () => {
+  it('re-renders as signed out and lets the sign-in page render (regression: stayed on /)', async () => {
+    serveMe(student);
+    const adapter = fakeAdapter(true);
+    function SignOutButton() {
+      const { signOut } = useAuth();
+      return <button onClick={() => void signOut()}>Sign out</button>;
+    }
+    renderWithApp(<RequireAuth><SignOutButton /></RequireAuth>, { adapter, path: '/admin/users', route: '/admin/users', extraRoutes: <Route path="/sign-in" element={<PublicOnly><p>sign in form</p><LocationProbe /></PublicOnly>} /> });
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText('sign in form')).toBeVisible();
+    // The next person to sign in must not be sent to the previous user's page.
+    expect(screen.getByTestId('location')).toHaveTextContent(/^\/sign-in$/);
+    expect(adapter.signOut).toHaveBeenCalledOnce();
   });
 });

@@ -77,7 +77,7 @@ export function CodeField<T extends FieldValues>({ control, name, label, descrip
     <Controller control={control} name={name} render={({ field, fieldState }) => (
       <Field data-invalid={fieldState.invalid}>
         <FieldLabel htmlFor={id}>{label}</FieldLabel>
-        <InputOTP id={id} maxLength={6} pattern="^[0-9]*$" inputMode="numeric" autoComplete="one-time-code" value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} aria-invalid={fieldState.invalid} containerClassName="justify-center">
+        <InputOTP ref={field.ref} id={id} maxLength={6} pattern="^[0-9]*$" inputMode="numeric" autoComplete="one-time-code" value={field.value ?? ''} onChange={field.onChange} onBlur={field.onBlur} aria-invalid={fieldState.invalid} containerClassName="justify-center">
           <InputOTPGroup>
             {Array.from({ length: 6 }, (_, index) => <InputOTPSlot key={index} index={index} aria-invalid={fieldState.invalid} />)}
           </InputOTPGroup>

@@ -12,10 +12,12 @@ import { useAuth } from './auth-context';
 
 /** Renders children only for a signed-in user; otherwise sends them to sign in and back. */
 export function RequireAuth({ children }: { children?: ReactNode }) {
-  const { status, error, refresh, signOut } = useAuth();
+  const { status, error, refresh, signOut, signedOutByUser } = useAuth();
   const location = useLocation();
   if (status === 'loading') return <FullPageSpinner />;
   if (status === 'signedOut') {
+    // After an explicit sign-out (e.g. on a shared lab computer) the next person starts fresh.
+    if (signedOutByUser) return <Navigate to="/sign-in" replace />;
     return <Navigate to={`/sign-in?returnTo=${encodeURIComponent(location.pathname + location.search)}`} replace />;
   }
   if (status === 'error') {

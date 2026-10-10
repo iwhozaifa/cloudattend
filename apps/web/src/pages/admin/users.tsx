@@ -14,7 +14,7 @@ import { Card } from '@/components/ui/card';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { errorMessage } from '@/lib/api';
 import { useAdminUsers, useSetRole } from '@/lib/queries';
 
@@ -34,19 +34,19 @@ export function AdminUsersPage() {
   return (
     <>
       <PageHeader title="Users & roles" description="Promote registered users to teachers or return them to students. Changes sign the user out so the new role takes effect." />
+      <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)} className="min-w-0 gap-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <Tabs value={filter} onValueChange={(value) => setFilter(value as Filter)}>
-          <TabsList>
-            <TabsTrigger value="ALL">All</TabsTrigger>
-            <TabsTrigger value="STUDENT">Students</TabsTrigger>
-            <TabsTrigger value="TEACHER">Teachers</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <TabsList>
+          <TabsTrigger value="ALL">All</TabsTrigger>
+          <TabsTrigger value="STUDENT">Students</TabsTrigger>
+          <TabsTrigger value="TEACHER">Teachers</TabsTrigger>
+        </TabsList>
         <div className="relative sm:w-72">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
           <Input type="search" placeholder="Search name, email, roll number" aria-label="Search users" className="pl-8" value={search} onChange={(event) => setSearch(event.target.value)} />
         </div>
       </div>
+      <TabsContent value={filter}>
       {users.isPending ? <PageSkeleton /> : users.isError ? <QueryError error={users.error} onRetry={() => void users.refetch()} /> : (
         <Card className="py-0">
           {visible.length === 0 ? (
@@ -69,6 +69,8 @@ export function AdminUsersPage() {
           )}
         </Card>
       )}
+      </TabsContent>
+      </Tabs>
     </>
   );
 }
