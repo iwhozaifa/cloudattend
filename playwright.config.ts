@@ -16,10 +16,20 @@ export default defineConfig({
     { name: 'tablet-chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } } },
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 } } }
   ],
-  webServer: {
-    command: 'npm --workspace @cloudattend/web run dev -- --host 127.0.0.1 --port 4173',
-    url: 'http://127.0.0.1:4173/login',
-    reuseExistingServer: !process.env.CI,
-    timeout: 30_000
-  }
+  // The real API router + Cognito emulation (apps/api/src/local-server.ts) and the web app in e2e mode.
+  webServer: [
+    {
+      command: 'npm run build -w @cloudattend/shared && tsx apps/api/src/local-server.ts',
+      url: 'http://127.0.0.1:8787/health',
+      env: { LOCAL_API_PORT: '8787' },
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000
+    },
+    {
+      command: 'npm --workspace @cloudattend/web run dev -- --mode e2e --host 127.0.0.1 --port 4173 --strictPort',
+      url: 'http://127.0.0.1:4173/sign-in',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000
+    }
+  ]
 });
