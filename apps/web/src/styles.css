@@ -128,7 +128,3 @@
     @apply font-sans;
     }
 }
-/* Legacy layout rules kept until the shadcn pages replace the interim pages. */
-@layer components {
-  .legacy{max-width:1100px;margin:auto;padding:2rem}.legacy header{display:flex;gap:1rem;align-items:center;padding:1rem 0;border-bottom:1px solid #dce2ee}.legacy .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1rem}.legacy article{border:1px solid #dce2ee;border-radius:12px;padding:1.25rem}.legacy button{background:#1255aa;color:white;border-radius:6px;padding:.7rem 1rem;font-weight:700}
-}
