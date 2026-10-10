@@ -21,20 +21,35 @@ describe('CloudAttend infrastructure', () => {
     expect(JSON.stringify(tables)).toContain('courseId-index');
   });
 
-  it('configures Cognito groups, secretless client, and post-confirmation trigger', () => {
+  it('configures Cognito groups, a hardened SRP-only client, and both triggers', () => {
     const stack = template();
     stack.resourceCountIs('AWS::Cognito::UserPoolGroup', 2);
-    stack.hasResourceProperties('AWS::Cognito::UserPoolClient', { GenerateSecret: false });
-    stack.hasResourceProperties('AWS::Cognito::UserPool', { LambdaConfig: { PostConfirmation: Match.anyValue() } });
+    stack.hasResourceProperties('AWS::Cognito::UserPoolClient', {
+      GenerateSecret: false,
+      PreventUserExistenceErrors: 'ENABLED',
+      EnableTokenRevocation: true,
+      ExplicitAuthFlows: ['ALLOW_USER_SRP_AUTH', 'ALLOW_REFRESH_TOKEN_AUTH']
+    });
+    stack.hasResourceProperties('AWS::Cognito::UserPool', {
+      LambdaConfig: { PostConfirmation: Match.anyValue(), PreSignUp: Match.anyValue() },
+      AccountRecoverySetting: { RecoveryMechanisms: [{ Name: 'verified_email', Priority: 1 }] },
+      Policies: { PasswordPolicy: Match.objectLike({ MinimumLength: 12, RequireSymbols: true, RequireNumbers: true }) }
+    });
   });
 
-  it('uses Node.js 24 and retained structured log groups for both Lambdas', () => {
+  it('scopes the post-confirmation group grant to this user pool', () => {
+    const policies = JSON.stringify(template().findResources('AWS::IAM::Policy'));
+    expect(policies).toContain('cognito-idp:AdminAddUserToGroup');
+    expect(policies).not.toContain('userpool/*');
+  });
+
+  it('uses Node.js 24 and 30-day log groups for every Lambda and API access logs', () => {
     const stack = template();
     const functions = stack.findResources('AWS::Lambda::Function');
     const applicationFunctions = Object.values(functions).filter((fn: any) => fn.Properties.Tags?.some((tag: any) => tag.Key === 'Project' && tag.Value === 'CloudAttend')) as any[];
-    expect(applicationFunctions).toHaveLength(2);
+    expect(applicationFunctions).toHaveLength(3);
     expect(applicationFunctions.every((fn) => fn.Properties.Runtime === 'nodejs24.x')).toBe(true);
-    stack.resourceCountIs('AWS::Logs::LogGroup', 2);
+    stack.resourceCountIs('AWS::Logs::LogGroup', 4);
     for (const group of Object.values(stack.findResources('AWS::Logs::LogGroup')) as any[]) expect(group.Properties.RetentionInDays).toBe(30);
   });
 
@@ -45,13 +60,26 @@ describe('CloudAttend infrastructure', () => {
     stack.hasResourceProperties('AWS::ApiGatewayV2::Route', { RouteKey: 'ANY /{proxy+}', AuthorizationType: 'JWT', AuthorizerId: Match.anyValue() });
   });
 
-  it('blocks public S3 access, expires reports, and uses CloudFront OAC', () => {
+  it('throttles the API stage and writes access logs', () => {
+    template().hasResourceProperties('AWS::ApiGatewayV2::Stage', {
+      DefaultRouteSettings: { ThrottlingBurstLimit: 200, ThrottlingRateLimit: 100 },
+      AccessLogSettings: { DestinationArn: Match.anyValue(), Format: Match.stringLikeRegexp('requestId') }
+    });
+  });
+
+  it('sends a strict CSP and Permissions-Policy from CloudFront', () => {
+    const policy = JSON.stringify(template().findResources('AWS::CloudFront::ResponseHeadersPolicy'));
+    expect(policy).toContain("frame-ancestors 'none'");
+    expect(policy).toContain("script-src 'self'");
+    expect(policy).toContain('Permissions-Policy');
+  });
+
+  it('blocks public S3 access and uses CloudFront OAC', () => {
     const stack = template();
-    stack.resourceCountIs('AWS::S3::Bucket', 2);
+    stack.resourceCountIs('AWS::S3::Bucket', 1);
     stack.hasResourceProperties('AWS::S3::Bucket', {
       PublicAccessBlockConfiguration: { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
     });
-    stack.hasResourceProperties('AWS::S3::Bucket', { LifecycleConfiguration: { Rules: Match.arrayWith([Match.objectLike({ ExpirationInDays: 30, Status: 'Enabled' })]) } });
     stack.resourceCountIs('AWS::CloudFront::OriginAccessControl', 1);
     stack.resourceCountIs('AWS::CloudFront::ResponseHeadersPolicy', 1);
   });

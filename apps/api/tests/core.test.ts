@@ -36,9 +36,9 @@ class MemoryStore implements Store {
   }
   seed(table: string, item: RecordItem) { this.rows.set(this.key(table, item), { ...item }); }
   async get(table: string, key: RecordItem) { return this.rows.get(this.key(table, key)); }
-  async put(table: string, item: RecordItem, condition?: 'absent') {
+  async put(table: string, item: RecordItem, options?: { ifAbsent: string }) {
     const key = this.key(table, item);
-    if (condition && this.rows.has(key)) throw conditionalError();
+    if (options && this.rows.has(key)) throw conditionalError();
     this.rows.set(key, { ...item });
   }
   async update(table: string, key: RecordItem, values: RecordItem) {
@@ -48,9 +48,9 @@ class MemoryStore implements Store {
     this.rows.set(this.key(table, key), updated);
     return updated;
   }
-  async delete(table: string, key: RecordItem, condition?: 'exists') {
+  async delete(table: string, key: RecordItem, options?: { ifExists: string }) {
     const resolved = this.key(table, key);
-    if (condition && !this.rows.has(resolved)) throw conditionalError();
+    if (options && !this.rows.has(resolved)) throw conditionalError();
     this.rows.delete(resolved);
   }
   async query(table: string, _index: string | undefined, key: string, value: string) {
@@ -64,8 +64,12 @@ class MemoryStore implements Store {
     this.rows.set(this.key(table, session), { ...session });
   }
   async closeSession(table: string, sessionId: string, courseId: string, values: RecordItem) {
-    const updated = await this.update(table, { sessionId }, values);
-    this.rows.delete(`${table}:ACTIVE#${courseId}`);
+    const key = this.key(table, { sessionId });
+    const current = this.rows.get(key);
+    if (current?.status !== 'OPEN') throw conditionalError();
+    const updated = { ...current, ...values };
+    this.rows.set(key, updated);
+    if (this.rows.get(`${table}:ACTIVE#${courseId}`)?.openSessionId === sessionId) this.rows.delete(`${table}:ACTIVE#${courseId}`);
     return updated;
   }
 }
@@ -168,6 +172,21 @@ describe('ownership, state, and validation', () => {
     await route(event('POST', `/sessions/${SESSION}/close`, 'TEACHER', TEACHER), store, cfg, clock);
     const again = await route(event('POST', `/sessions/${SESSION}/close`, 'TEACHER', TEACHER), store, cfg, clock);
     expect(again.statusCode).toBe(409); expect(parsed(again).error.code).toBe('SESSION_ALREADY_CLOSED');
+  });
+  it('closes an expired session even after a newer session took the course lock', async () => {
+    const store = openStore();
+    store.seed('sessions', { sessionId: SESSION, courseId: COURSE, teacherId: TEACHER, status: 'OPEN', scheduledEndTime: new Date(NOW - 60_000).toISOString() });
+    const started = await route(event('POST', `/courses/${COURSE}/sessions`, 'TEACHER', TEACHER, { durationMinutes: 10 }), store, cfg, clock);
+    expect(started.statusCode).toBe(201);
+    const closed = await route(event('POST', `/sessions/${SESSION}/close`, 'TEACHER', TEACHER), store, cfg, clock);
+    expect(closed.statusCode).toBe(200);
+    expect(parsed(closed).status).toBe('CLOSED');
+    expect(store.rows.get(`sessions:ACTIVE#${COURSE}`)?.openSessionId).toBe(parsed(started).sessionId);
+  });
+  it('maps a concurrent close race to 409 instead of 500', async () => {
+    const store = openStore();
+    const results = await Promise.all([1, 2].map(() => route(event('POST', `/sessions/${SESSION}/close`, 'TEACHER', TEACHER), store, cfg, clock)));
+    expect(results.map((result) => result.statusCode).sort()).toEqual([200, 409]);
   });
   it('allows exactly one of 20 concurrent session starts', async () => {
     const store = openStore();

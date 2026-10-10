@@ -13,11 +13,14 @@ import {
 export type RecordItem = Record<string, unknown>;
 export interface Store {
   get(table: string, key: RecordItem): Promise<RecordItem | undefined>;
-  put(table: string, item: RecordItem, condition?: 'absent'): Promise<void>;
+  /** `ifAbsent` names the partition-key attribute that must not already exist. */
+  put(table: string, item: RecordItem, options?: { ifAbsent: string }): Promise<void>;
   update(table: string, key: RecordItem, values: RecordItem): Promise<RecordItem>;
-  delete(table: string, key: RecordItem, condition?: 'exists'): Promise<void>;
+  /** `ifExists` names the partition-key attribute that must already exist. */
+  delete(table: string, key: RecordItem, options?: { ifExists: string }): Promise<void>;
   query(table: string, index: string | undefined, key: string, value: string): Promise<RecordItem[]>;
   createSession(table: string, session: RecordItem, nowEpochSeconds: number): Promise<void>;
+  /** Closes an OPEN session (conditional) and releases the course's open-session lock if it still points at it. */
   closeSession(table: string, sessionId: string, courseId: string, values: RecordItem): Promise<RecordItem>;
 }
 export type Config = {
@@ -27,7 +30,6 @@ export type Config = {
   sessions: string;
   attendance: string;
   qrSecret: string;
-  reportsBucket?: string;
 };
 export type Runtime = { now: () => number; uuid: () => string };
 const runtime: Runtime = { now: Date.now, uuid: randomUUID };
@@ -186,7 +188,7 @@ export async function route(
         const student = await store.get(config.users, { userId: studentId });
         if (!student || student.role !== 'STUDENT') throw new ApiError(404, 'STUDENT_NOT_FOUND', 'Student was not found.');
         try {
-          await store.put(config.enrollments, { courseId, studentId, enrolledAt: timestamp() }, 'absent');
+          await store.put(config.enrollments, { courseId, studentId, enrolledAt: timestamp() }, { ifAbsent: 'courseId' });
         } catch (error) {
           if (conditionalFailure(error)) throw new ApiError(409, 'ALREADY_ENROLLED', 'Student is already enrolled.');
           throw error;
@@ -202,7 +204,7 @@ export async function route(
       const studentId = identifier.parse(enrollment[2]);
       await ownedCourse(store, config, courseId, user.id);
       try {
-        await store.delete(config.enrollments, { courseId, studentId }, 'exists');
+        await store.delete(config.enrollments, { courseId, studentId }, { ifExists: 'courseId' });
       } catch (error) {
         if (conditionalFailure(error)) throw new ApiError(404, 'ENROLLMENT_NOT_FOUND', 'Enrollment was not found.');
         throw error;
@@ -252,7 +254,12 @@ export async function route(
       const session = await getSession(store, config, sessionId);
       if (session.teacherId !== user.id) throw new ApiError(403, 'FORBIDDEN', 'You do not own this session.');
       if (session.status === 'CLOSED') throw new ApiError(409, 'SESSION_ALREADY_CLOSED', 'This attendance session has already closed.');
-      return response(200, await store.closeSession(config.sessions, sessionId, String(session.courseId), { status: 'CLOSED', actualEndTime: timestamp() }));
+      try {
+        return response(200, await store.closeSession(config.sessions, sessionId, String(session.courseId), { status: 'CLOSED', actualEndTime: timestamp() }));
+      } catch (error) {
+        if (conditionalFailure(error)) throw new ApiError(409, 'SESSION_ALREADY_CLOSED', 'This attendance session has already closed.');
+        throw error;
+      }
     }
 
     if (method === 'POST' && path === '/attendance/check-in') {
@@ -270,7 +277,7 @@ export async function route(
         teacherId: session.teacherId, checkInTime: timestamp(), status: 'PRESENT', createdAt: timestamp()
       };
       try {
-        await store.put(config.attendance, attendance, 'absent');
+        await store.put(config.attendance, attendance, { ifAbsent: 'sessionId' });
       } catch (error) {
         if (conditionalFailure(error)) throw new ApiError(409, 'ATTENDANCE_ALREADY_RECORDED', 'Attendance already recorded.');
         throw error;
