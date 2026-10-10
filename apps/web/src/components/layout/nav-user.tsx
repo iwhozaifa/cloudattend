@@ -57,7 +57,7 @@ export function NavUser({ me }: { me: Me }) {
               </DropdownMenuSub>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={() => void signOut().then(() => navigate('/sign-in'))}><LogOutIcon />Sign out</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => void signOut()}><LogOutIcon />Sign out</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

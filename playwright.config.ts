@@ -2,6 +2,11 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // Tests share one in-memory local API, reset before each test, so they run serially.
+  workers: 1,
+  fullyParallel: false,
+  retries: process.env.CI ? 1 : 0,
+  timeout: 60_000,
   outputDir: 'test-results',
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
   use: {
