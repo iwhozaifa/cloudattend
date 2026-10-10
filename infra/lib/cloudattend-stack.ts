@@ -8,6 +8,7 @@ import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins';
 import * as s3 from 'aws-cdk-lib/aws-s3';
@@ -39,14 +40,6 @@ export class CloudAttendStack extends cdk.Stack {
     const attendance = this.table('Attendance', 'sessionId', 'studentId', removalPolicy, prod);
     attendance.addGlobalSecondaryIndex({ indexName: 'courseId-index', partitionKey: { name: 'courseId', type: dynamodb.AttributeType.STRING }, sortKey: { name: 'checkInTime', type: dynamodb.AttributeType.STRING } });
 
-    const reports = new s3.Bucket(this, 'Reports', {
-      blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
-      enforceSSL: true,
-      encryption: s3.BucketEncryption.S3_MANAGED,
-      lifecycleRules: [{ id: 'ExpireReports', expiration: Duration.days(30) }],
-      removalPolicy,
-      autoDeleteObjects: !prod
-    });
     const frontend = new s3.Bucket(this, 'Frontend', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       enforceSSL: true,
@@ -60,7 +53,28 @@ export class CloudAttendStack extends cdk.Stack {
         frameOptions: { frameOption: cloudfront.HeadersFrameOption.DENY, override: true },
         referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
         strictTransportSecurity: { accessControlMaxAge: Duration.days(365), includeSubdomains: true, preload: true, override: true },
-        xssProtection: { protection: true, modeBlock: true, override: true }
+        // Modern browsers ignore the legacy XSS auditor; OWASP recommends disabling it and relying on CSP.
+        xssProtection: { protection: false, override: true },
+        contentSecurityPolicy: {
+          contentSecurityPolicy: [
+            "default-src 'self'",
+            "script-src 'self'",
+            // Radix UI positions popovers with inline style attributes.
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data: blob:",
+            "font-src 'self' data:",
+            `connect-src 'self' https://*.execute-api.${this.region}.amazonaws.com https://cognito-idp.${this.region}.amazonaws.com`,
+            "media-src 'self' blob:",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+            "object-src 'none'"
+          ].join('; '),
+          override: true
+        }
+      },
+      customHeadersBehavior: {
+        customHeaders: [{ header: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(), payment=()', override: true }]
       }
     });
     const distribution = new cloudfront.Distribution(this, 'Distribution', {
@@ -70,7 +84,11 @@ export class CloudAttendStack extends cdk.Stack {
         responseHeadersPolicy: securityHeaders
       },
       defaultRootObject: 'index.html',
-      errorResponses: [{ httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html', ttl: Duration.minutes(1) }]
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2_2021,
+      errorResponses: [
+        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html', ttl: Duration.minutes(1) },
+        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html', ttl: Duration.minutes(1) }
+      ]
     });
 
     const pool = new cognito.UserPool(this, 'UserPool', {
@@ -79,10 +97,22 @@ export class CloudAttendStack extends cdk.Stack {
       autoVerify: { email: true },
       standardAttributes: { fullname: { required: true, mutable: true }, email: { required: true, mutable: true } },
       customAttributes: { rollNo: new cognito.StringAttribute({ minLen: 2, maxLen: 64, mutable: false }) },
-      passwordPolicy: { minLength: 12 },
+      signInCaseSensitive: false,
+      passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
+      accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
+      deletionProtection: prod,
       removalPolicy
     });
-    const client = pool.addClient('WebClient', { generateSecret: false, authFlows: { userSrp: true, userPassword: true } });
+    const client = pool.addClient('WebClient', {
+      generateSecret: false,
+      // SRP only: the plain USER_PASSWORD flow sends the password to Cognito and is not needed by the web app.
+      authFlows: { userSrp: true },
+      preventUserExistenceErrors: true,
+      enableTokenRevocation: true,
+      accessTokenValidity: Duration.hours(1),
+      idTokenValidity: Duration.hours(1),
+      refreshTokenValidity: Duration.days(30)
+    });
     new cognito.CfnUserPoolGroup(this, 'Students', { groupName: 'STUDENT', userPoolId: pool.userPoolId });
     new cognito.CfnUserPoolGroup(this, 'Teachers', { groupName: 'TEACHER', userPoolId: pool.userPoolId });
 
@@ -95,12 +125,26 @@ export class CloudAttendStack extends cdk.Stack {
       environment: { USERS_TABLE: users.tableName },
       bundling: { minify: true, sourceMap: true }
     });
-    users.grant(postConfirm, 'dynamodb:GetItem', 'dynamodb:PutItem');
-    postConfirm.addToRolePolicy(new cdk.aws_iam.PolicyStatement({
-      actions: ['cognito-idp:AdminAddUserToGroup'],
-      resources: [this.formatArn({ service: 'cognito-idp', resource: 'userpool', resourceName: '*' })]
-    }));
+    users.grant(postConfirm, 'dynamodb:GetItem', 'dynamodb:PutItem', 'dynamodb:ConditionCheckItem');
     pool.addTrigger(cognito.UserPoolOperation.POST_CONFIRMATION, postConfirm);
+    // A standalone policy (not the function's default policy) can reference the pool ARN without a
+    // circular dependency, so the trigger is limited to this pool instead of every pool in the account.
+    new iam.Policy(this, 'PostConfirmationCognitoPolicy', {
+      roles: [postConfirm.role!],
+      statements: [new iam.PolicyStatement({ actions: ['cognito-idp:AdminAddUserToGroup'], resources: [pool.userPoolArn] })]
+    });
+
+    const preSignUpLogs = new logs.LogGroup(this, 'PreSignUpLogs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy });
+    const preSignUp = new NodejsFunction(this, 'PreSignUp', {
+      runtime: lambda.Runtime.NODEJS_24_X,
+      entry: join(import.meta.dirname, '../../apps/api/src/pre-sign-up.ts'),
+      handler: 'handler',
+      logGroup: preSignUpLogs,
+      environment: { USERS_TABLE: users.tableName },
+      bundling: { minify: true, sourceMap: true }
+    });
+    users.grant(preSignUp, 'dynamodb:PutItem');
+    pool.addTrigger(cognito.UserPoolOperation.PRE_SIGN_UP, preSignUp);
 
     const qrSecret = new secrets.Secret(this, 'QrSigningSecret', {
       generateSecretString: { passwordLength: 64, excludePunctuation: true }
@@ -119,22 +163,28 @@ export class CloudAttendStack extends cdk.Stack {
         ENROLLMENTS_TABLE: enrollments.tableName,
         SESSIONS_TABLE: sessions.tableName,
         ATTENDANCE_TABLE: attendance.tableName,
-        QR_SECRET_ARN: qrSecret.secretArn,
-        REPORTS_BUCKET: reports.bucketName
+        QR_SECRET_ARN: qrSecret.secretArn
       },
       bundling: { minify: true, sourceMap: true }
     });
     [users, courses, enrollments, sessions, attendance].forEach((table) => table.grantReadWriteData(apiFunction));
-    reports.grantReadWrite(apiFunction);
     qrSecret.grantRead(apiFunction);
 
     const api = new apigwv2.HttpApi(this, 'HttpApi', {
       corsPreflight: {
         allowHeaders: ['authorization', 'content-type'],
-        allowMethods: [apigwv2.CorsHttpMethod.ANY],
-        allowOrigins: [`https://${distribution.domainName}`, ...(prod ? [] : ['http://localhost:5173'])]
+        allowMethods: [apigwv2.CorsHttpMethod.GET, apigwv2.CorsHttpMethod.POST, apigwv2.CorsHttpMethod.PUT, apigwv2.CorsHttpMethod.DELETE, apigwv2.CorsHttpMethod.OPTIONS],
+        allowOrigins: [`https://${distribution.domainName}`, ...(prod ? [] : ['http://localhost:5173'])],
+        maxAge: Duration.hours(1)
       }
     });
+    const apiAccessLogs = new logs.LogGroup(this, 'ApiAccessLogs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy });
+    const stage = api.defaultStage!.node.defaultChild as apigwv2.CfnStage;
+    stage.defaultRouteSettings = { throttlingBurstLimit: 200, throttlingRateLimit: 100 };
+    stage.accessLogSettings = {
+      destinationArn: apiAccessLogs.logGroupArn,
+      format: JSON.stringify({ requestId: '$context.requestId', ip: '$context.identity.sourceIp', routeKey: '$context.routeKey', status: '$context.status', latency: '$context.responseLatency', error: '$context.error.message' })
+    };
     const integration = new integrations.HttpLambdaIntegration('ApiIntegration', apiFunction);
     const jwt = new authorizers.HttpUserPoolAuthorizer('JwtAuth', pool, { userPoolClients: [client] });
     api.addRoutes({ path: '/{proxy+}', methods: [apigwv2.HttpMethod.ANY], integration, authorizer: jwt });
@@ -152,7 +202,6 @@ export class CloudAttendStack extends cdk.Stack {
     new CfnOutput(this, 'UserPoolId', { value: pool.userPoolId });
     new CfnOutput(this, 'UserPoolClientId', { value: client.userPoolClientId });
     new CfnOutput(this, 'FrontendBucket', { value: frontend.bucketName });
-    new CfnOutput(this, 'ReportsBucket', { value: reports.bucketName });
     new CfnOutput(this, 'DistributionId', { value: distribution.distributionId });
   }
 
