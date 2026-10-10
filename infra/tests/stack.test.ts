@@ -89,7 +89,7 @@ describe('CloudAttend infrastructure', () => {
   it('creates a generated secret and a Lambda error alarm', () => {
     const stack = template();
     stack.hasResourceProperties('AWS::SecretsManager::Secret', { GenerateSecretString: Match.objectLike({ PasswordLength: 64 }) });
-    stack.resourceCountIs('AWS::CloudWatch::Alarm', 1);
+    stack.resourceCountIs('AWS::CloudWatch::Alarm', 2);
   });
 
   it('has no administrator policy or wildcard action', () => {
@@ -106,6 +106,7 @@ describe('CloudAttend infrastructure', () => {
     for (const table of Object.values(stack.findResources('AWS::DynamoDB::Table')) as any[]) {
       expect(table.DeletionPolicy).toBe('Retain');
       expect(table.Properties.PointInTimeRecoverySpecification.PointInTimeRecoveryEnabled).toBe(true);
+      expect(table.Properties.DeletionProtectionEnabled).toBe(true);
     }
   });
 });

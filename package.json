@@ -25,7 +25,7 @@
     "dev": "npm --workspace @cloudattend/web run dev",
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present && tsc -p scripts/tsconfig.json",
     "test": "npm run test --workspaces --if-present",
     "test:api": "npm --workspace @cloudattend/api run test",
     "test:web": "npm --workspace @cloudattend/web run test",

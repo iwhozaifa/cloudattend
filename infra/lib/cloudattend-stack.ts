@@ -101,6 +101,8 @@ export class CloudAttendStack extends cdk.Stack {
       standardAttributes: { fullname: { required: true, mutable: true }, email: { required: true, mutable: true } },
       customAttributes: { rollNo: new cognito.StringAttribute({ minLen: 2, maxLen: 64, mutable: false }) },
       signInCaseSensitive: false,
+      // A changed email only replaces the verified one after the new address is confirmed.
+      keepOriginal: { email: true },
       passwordPolicy: { minLength: 12, requireLowercase: true, requireUppercase: true, requireDigits: true, requireSymbols: true },
       accountRecovery: cognito.AccountRecovery.EMAIL_ONLY,
       deletionProtection: prod,
@@ -206,6 +208,14 @@ export class CloudAttendStack extends cdk.Stack {
       treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING
     });
 
+    new cloudwatch.Alarm(this, 'Api5xxAlarm', {
+      alarmDescription: 'HTTP API returned server errors',
+      metric: api.metricServerError({ period: Duration.minutes(5), statistic: 'sum' }),
+      threshold: 5,
+      evaluationPeriods: 1,
+      treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING
+    });
+
     new CfnOutput(this, 'ApiUrl', { value: api.apiEndpoint });
     new CfnOutput(this, 'CloudFrontUrl', { value: `https://${distribution.domainName}` });
     new CfnOutput(this, 'UserPoolId', { value: pool.userPoolId });
@@ -220,6 +230,7 @@ export class CloudAttendStack extends cdk.Stack {
       sortKey: sortKey ? { name: sortKey, type: dynamodb.AttributeType.STRING } : undefined,
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
       pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: prod },
+      deletionProtection: prod,
       removalPolicy
     });
   }
