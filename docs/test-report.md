@@ -1,5 +1,7 @@
 # CloudAttend Sandbox Verification Report
 
+> **Superseded for v1.0.0.** The 2026-10-04 findings below are kept for history. The gaps they list (password reset, reports, camera scanning, dashboards, admin tooling, deploy scripts) were closed in the v1.0.0 work; see [Release verification: v1.0.0](#release-verification-v100) at the end and [`bug-report.md`](bug-report.md).
+
 ## Test environment
 
 | Field | Value |
@@ -252,3 +254,29 @@ Verification work began from commit `58ac38b` on branch `test/sandbox-verificati
 ```
 
 No release tag was created because required features and deployed verification are incomplete. The branch must not be merged as a claim of complete production verification; merge only if the locally verified hardening changes are desired.
+
+## Release verification: v1.0.0
+
+| Field | Value |
+|---|---|
+| Date | 2026-10-10 |
+| Environment | Local only (no AWS CLI or credentials; nothing deployed) |
+| Browser | Chromium (Playwright), three viewports: mobile, tablet, desktop |
+
+| Gate | Result |
+|---|---|
+| `npm run check:secrets` | PASS |
+| `npm run lint` | PASS |
+| `npm run typecheck` (all workspaces + scripts) | PASS |
+| API tests (vitest) | 92 passed |
+| Web component tests (vitest + Testing Library + MSW) | 86 passed |
+| Infrastructure assertions (CDK) | 11 passed |
+| `npm run build` | PASS; prod bundle contains no local-auth code or demo credentials |
+| `npm run cdk:synth` | PASS |
+| `npm run test:e2e` (Playwright + axe) | 54 passed (18 tests × 3 viewports) |
+| `npm audit --omit=dev` | 0 vulnerabilities |
+| `npm run dev:local` smoke test | PASS after fixing BUG-19 (web 200, `/me` unauthenticated 401, demo teacher sign-in and course list OK) |
+
+The E2E journeys cover sign-up with code confirmation, duplicate roll numbers, sign-in, forgot password, sign-out, and the open-redirect guard. They also cover a teacher creating a course, enrolling by email and roll number, starting a session, and showing the QR code; QR rotation is covered by a fake-timer component test. The student checks in through both the link and pasted-token paths, and duplicate check-ins are rejected. Finally, the teacher sees the live list, closes the session, and views the report and CSV. An administrator promotes a user, and every page shows no serious or critical axe violations, with student pages also audited in dark mode.
+
+**Not verified:** behaviour on a deployed AWS stack, including Cognito email delivery, the real JWT authorizer, DynamoDB transactions, and CloudFront headers. Camera scanning was verified only up to the scanner component, not with a real camera. Follow the README's post-deployment smoke test after the first deploy.
