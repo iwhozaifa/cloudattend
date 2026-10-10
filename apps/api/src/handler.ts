@@ -1,9 +1,12 @@
+import { randomUUID } from 'node:crypto';
 import { GetSecretValueCommand, SecretsManagerClient } from '@aws-sdk/client-secrets-manager';
 import type { APIGatewayProxyHandlerV2 } from 'aws-lambda';
+import { createCognitoDirectory } from './cognito-directory.js';
 import { route } from './core.js';
 import { createDynamoStore } from './dynamo-store.js';
 
 const store = createDynamoStore();
+const directory = createCognitoDirectory(process.env.USER_POOL_ID!);
 const secrets = new SecretsManagerClient({});
 let cachedQrSecret: string | undefined;
 
@@ -23,4 +26,4 @@ export const handler: APIGatewayProxyHandlerV2 = async (event) => route(event, s
   sessions: process.env.SESSIONS_TABLE!,
   attendance: process.env.ATTENDANCE_TABLE!,
   qrSecret: await qrSecret()
-});
+}, { now: Date.now, uuid: randomUUID, directory });

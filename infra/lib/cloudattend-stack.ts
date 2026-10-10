@@ -31,6 +31,7 @@ export class CloudAttendStack extends cdk.Stack {
     const users = this.table('Users', 'userId', undefined, removalPolicy, prod);
     users.addGlobalSecondaryIndex({ indexName: 'email-index', partitionKey: { name: 'email', type: dynamodb.AttributeType.STRING } });
     users.addGlobalSecondaryIndex({ indexName: 'rollNo-index', partitionKey: { name: 'rollNo', type: dynamodb.AttributeType.STRING } });
+    users.addGlobalSecondaryIndex({ indexName: 'role-index', partitionKey: { name: 'role', type: dynamodb.AttributeType.STRING }, sortKey: { name: 'email', type: dynamodb.AttributeType.STRING } });
     const courses = this.table('Courses', 'courseId', undefined, removalPolicy, prod);
     courses.addGlobalSecondaryIndex({ indexName: 'teacherId-index', partitionKey: { name: 'teacherId', type: dynamodb.AttributeType.STRING } });
     const enrollments = this.table('Enrollments', 'courseId', 'studentId', removalPolicy, prod);
@@ -39,6 +40,7 @@ export class CloudAttendStack extends cdk.Stack {
     sessions.addGlobalSecondaryIndex({ indexName: 'courseId-index', partitionKey: { name: 'courseId', type: dynamodb.AttributeType.STRING }, sortKey: { name: 'startTime', type: dynamodb.AttributeType.STRING } });
     const attendance = this.table('Attendance', 'sessionId', 'studentId', removalPolicy, prod);
     attendance.addGlobalSecondaryIndex({ indexName: 'courseId-index', partitionKey: { name: 'courseId', type: dynamodb.AttributeType.STRING }, sortKey: { name: 'checkInTime', type: dynamodb.AttributeType.STRING } });
+    attendance.addGlobalSecondaryIndex({ indexName: 'studentId-index', partitionKey: { name: 'studentId', type: dynamodb.AttributeType.STRING }, sortKey: { name: 'checkInTime', type: dynamodb.AttributeType.STRING } });
 
     const frontend = new s3.Bucket(this, 'Frontend', {
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -115,6 +117,7 @@ export class CloudAttendStack extends cdk.Stack {
     });
     new cognito.CfnUserPoolGroup(this, 'Students', { groupName: 'STUDENT', userPoolId: pool.userPoolId });
     new cognito.CfnUserPoolGroup(this, 'Teachers', { groupName: 'TEACHER', userPoolId: pool.userPoolId });
+    new cognito.CfnUserPoolGroup(this, 'Admins', { groupName: 'ADMIN', userPoolId: pool.userPoolId, description: 'Can list users and change their STUDENT/TEACHER role' });
 
     const postConfirmLogs = new logs.LogGroup(this, 'PostConfirmLogs', { retention: logs.RetentionDays.ONE_MONTH, removalPolicy });
     const postConfirm = new NodejsFunction(this, 'PostConfirmation', {
@@ -163,12 +166,17 @@ export class CloudAttendStack extends cdk.Stack {
         ENROLLMENTS_TABLE: enrollments.tableName,
         SESSIONS_TABLE: sessions.tableName,
         ATTENDANCE_TABLE: attendance.tableName,
-        QR_SECRET_ARN: qrSecret.secretArn
+        QR_SECRET_ARN: qrSecret.secretArn,
+        USER_POOL_ID: pool.userPoolId
       },
       bundling: { minify: true, sourceMap: true }
     });
     [users, courses, enrollments, sessions, attendance].forEach((table) => table.grantReadWriteData(apiFunction));
     qrSecret.grantRead(apiFunction);
+    apiFunction.addToRolePolicy(new iam.PolicyStatement({
+      actions: ['cognito-idp:ListUsers', 'cognito-idp:AdminAddUserToGroup', 'cognito-idp:AdminRemoveUserFromGroup', 'cognito-idp:AdminUserGlobalSignOut'],
+      resources: [pool.userPoolArn]
+    }));
 
     const api = new apigwv2.HttpApi(this, 'HttpApi', {
       corsPreflight: {
