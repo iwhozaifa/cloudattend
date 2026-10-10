@@ -1,5 +1,5 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { BatchGetCommand, DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, TransactWriteCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import type { RecordItem, Store } from './core.js';
 
 function setExpression(values: RecordItem) {
@@ -21,6 +21,20 @@ export function createDynamoStore(db = DynamoDBDocumentClient.from(new DynamoDBC
   return {
     async get(TableName, Key) {
       return (await db.send(new GetCommand({ TableName, Key }))).Item;
+    },
+    async batchGet(TableName, keys) {
+      const items: RecordItem[] = [];
+      for (let offset = 0; offset < keys.length; offset += 100) {
+        let pending: RecordItem[] | undefined = keys.slice(offset, offset + 100);
+        for (let attempt = 0; pending?.length; attempt++) {
+          if (attempt > 0) await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 25));
+          if (attempt > 5) throw new Error('BatchGet did not complete after retries');
+          const result = await db.send(new BatchGetCommand({ RequestItems: { [TableName]: { Keys: pending } } }));
+          items.push(...(result.Responses?.[TableName] ?? []));
+          pending = result.UnprocessedKeys?.[TableName]?.Keys as RecordItem[] | undefined;
+        }
+      }
+      return items;
     },
     async put(TableName, Item, options) {
       await db.send(new PutCommand({

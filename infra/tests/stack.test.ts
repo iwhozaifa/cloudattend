@@ -19,11 +19,13 @@ describe('CloudAttend infrastructure', () => {
     expect(JSON.stringify(tables)).toContain('teacherId-index');
     expect(JSON.stringify(tables)).toContain('studentId-index');
     expect(JSON.stringify(tables)).toContain('courseId-index');
+    expect(JSON.stringify(tables)).toContain('role-index');
   });
 
   it('configures Cognito groups, a hardened SRP-only client, and both triggers', () => {
     const stack = template();
-    stack.resourceCountIs('AWS::Cognito::UserPoolGroup', 2);
+    stack.resourceCountIs('AWS::Cognito::UserPoolGroup', 3);
+    stack.hasResourceProperties('AWS::Cognito::UserPoolGroup', { GroupName: 'ADMIN' });
     stack.hasResourceProperties('AWS::Cognito::UserPoolClient', {
       GenerateSecret: false,
       PreventUserExistenceErrors: 'ENABLED',

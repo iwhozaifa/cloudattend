@@ -2,10 +2,25 @@
   "name": "cloudattend",
   "version": "1.0.0",
   "private": true,
-  "workspaces": ["apps/*", "packages/*", "infra"],
-  "engines": { "node": ">=24" },
-  "overrides": { "brace-expansion": "5.0.12" },
-  "devDependencies": { "@axe-core/playwright": "^4.10.2", "@playwright/test": "^1.51.0", "@vitest/coverage-v8": "^5.0.3", "vitest": "^5.0.3" },
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "infra"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "overrides": {
+    "brace-expansion": "5.0.12"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.10.2",
+    "@playwright/test": "^1.51.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "concurrently": "^9.2.5",
+    "tsx": "^4.23.15",
+    "vitest": "^5.0.3"
+  },
   "scripts": {
     "dev": "npm --workspace @cloudattend/web run dev",
     "build": "npm run build --workspaces --if-present",
@@ -17,6 +32,9 @@
     "test:coverage": "npm run test:coverage --workspaces --if-present",
     "test:e2e": "playwright test",
     "cdk:synth": "npm --workspace @cloudattend/infra run synth",
-    "check:secrets": "node scripts/check-secrets.mjs"
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "dev:api": "npm run build -w @cloudattend/shared && tsx watch apps/api/src/local-server.ts",
+    "dev:local": "npm run build -w @cloudattend/shared && concurrently -k -n api,web -c blue,green \"tsx apps/api/src/local-server.ts\" \"npm -w @cloudattend/web run dev -- --mode local\"",
+    "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
   }
 }
