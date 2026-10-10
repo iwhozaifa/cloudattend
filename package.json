@@ -34,7 +34,7 @@
     "cdk:synth": "npm --workspace @cloudattend/infra run synth",
     "check:secrets": "node scripts/check-secrets.mjs",
     "dev:api": "npm run build -w @cloudattend/shared && tsx watch apps/api/src/local-server.ts",
-    "dev:local": "npm run build -w @cloudattend/shared && concurrently -k -n api,web -c blue,green \"tsx apps/api/src/local-server.ts\" \"npm -w @cloudattend/web run dev -- --mode local\"",
+    "dev:local": "npm run build -w @cloudattend/shared && concurrently -k -n api,web -c blue,green \"tsx apps/api/src/local-server.ts\" \"npm -w @cloudattend/web run dev -- --mode demo\"",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
   }
 }
