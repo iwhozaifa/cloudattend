@@ -14,7 +14,7 @@ function writeToken(token: string | undefined) {
 
 /**
  * Talks to the local development server's Cognito emulation (`apps/api/src/local-server.ts`).
- * Only loaded in `--mode local` / `--mode e2e`; never part of a production bundle.
+ * Only loaded in `--mode demo` / `--mode e2e`; never part of a production bundle.
  */
 export function createLocalAdapter(apiUrl: string): AuthAdapter {
   let memoryToken = readToken();

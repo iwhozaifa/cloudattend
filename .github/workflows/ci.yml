@@ -28,6 +28,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run test
       - run: npm run build
+      - name: Production bundle excludes local-mode code
+        run: "! grep -rlE 'local-auth/|CloudAttend#2026' apps/web/dist"
       - run: npm run cdk:synth
       - run: npm audit --omit=dev --audit-level=high
       - run: npx playwright install --with-deps chromium

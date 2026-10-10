@@ -8,8 +8,8 @@ const CognitoConfigSchema = z.object({
 });
 export type RuntimeConfig = z.infer<typeof CognitoConfigSchema> & { authMode: 'cognito' | 'local' };
 
-/** True only for `vite --mode local` / `--mode e2e`; production builds compile this to `false`. */
-export const isLocalMode = import.meta.env.MODE === 'local' || import.meta.env.MODE === 'e2e';
+/** True only for `vite --mode demo` / `--mode e2e`; production builds compile this to `false`. */
+export const isLocalMode = import.meta.env.MODE === 'demo' || import.meta.env.MODE === 'e2e';
 
 export async function loadConfig(): Promise<RuntimeConfig> {
   if (isLocalMode) {
