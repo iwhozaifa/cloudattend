@@ -11,5 +11,19 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     }
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Long-lived vendor chunks so app deploys do not invalidate the large Amplify/React downloads.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/[\\/](@aws-amplify|aws-amplify|@aws-crypto|@aws-sdk|@smithy)[\\/]/.test(id)) return 'vendor-amplify';
+          if (/[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'vendor-react';
+          if (/[\\/](radix-ui|@radix-ui)[\\/]/.test(id)) return 'vendor-radix';
+          return undefined;
+        }
+      }
+    }
+  },
   test: { environment: 'jsdom', setupFiles: ['./src/test-setup.ts'], include: ['src/**/*.test.{ts,tsx}'] }
 });

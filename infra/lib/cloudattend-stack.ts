@@ -60,7 +60,8 @@ export class CloudAttendStack extends cdk.Stack {
         contentSecurityPolicy: {
           contentSecurityPolicy: [
             "default-src 'self'",
-            "script-src 'self'",
+            // 'wasm-unsafe-eval' lets the self-hosted QR decoder compile WebAssembly; it does not allow eval().
+            "script-src 'self' 'wasm-unsafe-eval'",
             // Radix UI positions popovers with inline style attributes.
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data: blob:",
